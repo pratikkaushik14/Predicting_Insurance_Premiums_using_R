@@ -1,0 +1,438 @@
+---
+title: "DATA603 PROJECT"
+author: "GROUP 19"
+date: "2023-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#LIBRARY USED FOR THE PROJECT
+library(mctest)
+library(lmtest)
+library(ggplot2)
+library(GGally)
+library(MASS)
+library(olsrr)
+library(leaps)
+```
+
+```{r}
+insurance_data=read.csv("D:/University of Calgary Notes/DATA 603/PROJECT/Insurance/insurance.csv")
+head(insurance_data,4)
+```
+**PART 1: MODEL SELECTION (ADDITIVE)**
+**Full Additive Model:**
+```{r}
+#FULL ADDITIVE MODEL
+full_model=lm(charges~age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+summary(full_model)
+```
+**Now, We conduct a overall F_test or global test to find if the relationship between the response and predictors to test the overall significance if the multiple regression model is useful.**
+*HYPOTHESIS__ Null: beta1=beta2=beta(3)...=0. Alternative= at least one beta(i) is not zero(i=1,2,3.....)*
+```{r}
+f_test_model=lm(charges~1,data=insurance_data)
+anova(f_test_model,full_model)
+```
+*Since the p_value is less than significance level(alpha=0.05) we reject the null hypothesis suggesting that at least one of the predictor is not zero and is related to the reponse variable.*
+
+
+**Check for any multicollinearity in the parent variables:**
+```{r}
+pairs(~charges+age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+```
+```{r}
+imcdiag(full_model,method="VIF")
+```
+*No multicollinearity detected among the parent variables. Now we to move to best model selection as there are multiple variables we will use the Stepwise, Forward, Backward and All possible regreeison Procedures to select the best additive model:*
+```{r}
+#STEPWISE 
+step_model=ols_step_both_p(full_model,pent = 0.1, prem = 0.3, details=TRUE)
+summary(step_model$model)
+```
+```{r}
+#FORWARD
+forward_model=ols_step_forward_p(full_model, penter =0.1,details=TRUE)
+summary(forward_model$model)
+```
+```{r}
+#BACKWARD
+backward_model=ols_step_backward_p(full_model, prem = 0.3, details=TRUE)
+summary(backward_model$model)
+```
+*The common predictor variables selected in all the Stepwise, Forward, and Backward Selection Methods are the same. The sex variable is not statistically significant. So we reduce the model and conduct a F_Test *
+
+**F_Test Hypothesis: NULL= The reduced model is adequate. Alternative= The full model is more adequate**
+```{r}
+full_model=lm(charges~age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+reduced_model=lm(charges~age+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+anova(reduced_model,full_model)
+```
+*Based on the F_test we observe that the p_value is greater than the significance level of (alpha=0.05), therefore we fail to reject the null_hypothesis suggesting that the reduced model is better. Therefore we drop the predictor variable Sex*
+
+**INDIVIDUAL COEFFIEIENTS TEST (t_test) on the reduced model.**
+*Hypothesis__ Null: beta(i)=0. Alternative= beta(i) does not equal to 0. (i=1,2,3,....,p)*
+```{r}
+summary(reduced_model)
+```
+*Based on the summary(reduced_model) we observe that that the variable region(northwest) has a t_value=-0.740 and P-value>alpha=0 indicating we fail to reject the null hypothesis and the region(northwest) does not significantly influence the insurance charges. However, since the other regions (northeast, southwest and southeast) are significant we do not remove this qualitative predictor variable (region) from our model. Other than that all the predictors are significant at alpha=0.05.*
+
+**We now conduct a All Possible Regression Selection Procedure:**
+```{r}
+full_model=lm(charges~age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+best.subset=regsubsets(charges~age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+bestsubset=summary(best.subset)
+bestsubset
+```
+```{r}
+cp=c(bestsubset$cp)
+AdjustedR=c(bestsubset$adjr)
+BIC=c(bestsubset$bic)
+RMSE=c(bestsubset$rss)
+cbind(cp,RMSE,AdjustedR,BIC)
+```
+```{r}
+par(mfrow=c(3,2)) # split the plotting panel into a 3 x 2 grid
+plot(bestsubset$cp,type = "o",pch=10, xlab="Number of Variables",ylab= "Cp")
+plot(bestsubset$rss,type = "o",pch=10, xlab="Number of Variables",ylab= "RMSE")
+plot(bestsubset$adjr2,type = "o",pch=10, xlab="Number of Variables",ylab= "Adjusted Rˆ2")
+plot(bestsubset$bic,type = "o",pch=10, xlab="Number of Variables",ylab= "BIC")
+```
+*Based on the BIC model model 4 would be the best because it has the lowest BIC. Based on adjusted_r2 the model 6 would be the best because it has the highest adjusted_r2 value. Overall, the best model would be the model with five predictors(age, bmi, children, smoker, and region) because its BIC is significantly closer to the lowest BIC and its adjusted_r2 is relatively high and the cp and rmse value also relatively on the lower side.*
+
+**The result for all the model selection procedures aligns for the Stepwise, Forward, Backward, and All Possible Regression Selection Procedures. Therefore in conclusion the best additive model is: Charges=beta(0)+beta(1)*age+beta(2)*bmi+beta(3)*children+beta(4)*I(smoker=yes)+beta(5)*I(region=northwest)+beta(6)*I(region=southeast)+beta(7)*I(region=southwest). The summary of the best model is provided below: **
+```{r}
+summary(reduced_model)
+```
+
+**USING AIC**
+```{r}
+#Select the subset of predictors that do the best at meeting some well-defined objective criterion, such as having the largest R2 value or the smallest MSE, Mallow's Cp or AIC.
+ExecSubsets=ols_step_best_subset(full_model, details=TRUE,nv = 7)
+summary(ExecSubsets)
+```
+
+```{r}
+# for the output interpretation
+rsquare=c(ExecSubsets$rsquare)
+AdjustedR=c(ExecSubsets$adjr)
+cp=c(ExecSubsets$cp)
+AIC=c(ExecSubsets$aic)
+cbind(rsquare,AdjustedR,cp,AIC)
+```
+```{r}
+par(mfrow=c(2,2)) # split the plotting panel into a 2 x 2 grid
+plot(ExecSubsets$cp,type = "o",pch=10, xlab="Number of Variables",ylab= "Cp")
+plot(ExecSubsets$rsquare,type = "o",pch=10, xlab="Number of Variables",ylab= "Rˆ2")
+plot(ExecSubsets$aic,type = "o",pch=10, xlab="Number of Variables",ylab= "AIC")
+plot(ExecSubsets$adjr,type = "o",pch=10, xlab="Number of Variables",ylab= "Adjusted R^2")
+```
+
+```{r}
+ExecSubsets$predictors
+```
+*Based on the AIC model model 5 would be the best because it has the lowest AIC, best adjusted_r2 and lowest cp.Overall, the best model would be the model with five predictors(age, bmi, children, smoker, and region) *
+
+
+**PART 2: ADD INTERACTIONS**
+**CHECK FOR INTERACTIONS ON THE BEST ADDITIVE MODEL**
+```{r}
+#Full Model
+full_model=lm(charges~age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+#The best additive model is the reduced_model
+reduced_model=lm(charges~age+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+
+#Interaction model
+interact_model=lm(charges~(age+bmi+children+factor(smoker)+factor(region))^2,data=insurance_data)
+summary(interact_model)
+```
+
+*The only interaction term that are statistically significant with the p_value less than alpha=0.05 are the interaction between (bmi:factor(smoker)) and (bmi:factor(region)). Now we include the interaction terms that are significant to our best additive model: *
+```{r}
+interact_final_model=lm(charges~age+bmi+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+summary(interact_final_model)
+```
+*This is our best model with interactions as we observe that the interaction terms are significant at alpha=0.05. We now compare our best model between additive and interaction model* 
+
+```{r}
+data.frame(Model = c("reduced_model","interact_final_model"),Adjusted_R2 =c(summary(reduced_model)$adj.r.squared,summary(interact_final_model)$adj.r.squared),RMSE=c(summary(reduced_model)$sigma,summary(interact_final_model)$sigma))
+```
+
+*Comparing the best additive model(reduced_model) with the best interaction model (interact_final_model) we observe that the interaction model has a higher Adjusted_R2 with lower RMSE. This indicates that the interaction model is better to use for predicting our response variable(charges).*
+
+**PART 3: CHECK FOR HIGHER ORDER VARIBLES**
+*We select the best higher order variables based on the Individual T_test at significance level of alpha=0.05*
+*Individual T_test Hypothesis_> Null: beta(i)=0. Alternative= beta(i) does not equal to 0. (i=1,2,3,....,p)*
+
+```{r}
+#Best Model Thus FAR is the interact_final_model
+quad_model=lm(charges~age+I(age^2)+bmi+I(bmi^2)+children+I(children^2)+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+summary(quad_model)
+```
+*The only significant higher order terms are I(age^2) and I(bmi^2) so we move to create a cubic model on the significant predictors from the quad_model.* 
+```{r}
+cubic_model=quad_model=lm(charges~age+I(age^2)+I(age^3)+bmi+I(bmi^2)+I(bmi^3)+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+summary(cubic_model)
+```
+*Age becomes insignificant when for the cubic term however, the cubic term for bmi is still significant. So we move on to create another model with fourth power on bmi while leaving age at the second order.*
+```{r}
+fourth_model=lm(charges~age+I(age^2)+bmi+I(bmi^2)+I(bmi^3)+I(bmi^4)+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+summary(fourth_model)
+```
+
+*We increase the power to five now since the fourth power is still significant*
+```{r}
+fifth_model=lm(charges~age+I(age^2)+bmi+I(bmi^2)+I(bmi^3)+I(bmi^4)+I(bmi^5)+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+summary(fifth_model)
+```
+
+*The power to the five becomes insignificant for the bmi. Therefore the model with the fourth order term is the most significant higher order model so far.Now we compare the adjusted_r2 and rmse to find the best higher order model.*
+```{r}
+data.frame(Model = c("quad_model","cubic_model","fourth_model"),Adjusted_R2 =c(summary(quad_model)$adj.r.squared,summary(cubic_model)$adj.r.squared,summary(fourth_model)$adj.r.squared),RMSE=c(summary(quad_model)$sigma,summary(cubic_model)$sigma,summary(fourth_model)$sigma))
+```
+*Based on the table above comapring the adjusted_r2 and rmse we observe that the fourth_model has the highest adjusted_r2 with lowest rmse therefore this model is the best higher order model.* 
+
+**Now we need compare the best higher order model with the best interaction model to find if the higher model is statistically significant using F_test.** 
+*F_Test Hypothesis: NULL= The higher orders terms are not statistically significnat . Alternative= At least one of the higher order term is statistically significant*
+```{r}
+interact_final_model=lm(charges~age+bmi+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+fourth_model=lm(charges~age+I(age^2)+bmi+I(bmi^2)+I(bmi^3)+I(bmi^4)+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+anova(fourth_model,interact_final_model)
+```
+*We observe the p_value is less than alpha=0.05 we reject the null hypothesis suggesting that the higher order terms added are statistically significant. Therefore the best model so far is the higher order model (fourth_model) which has a I(age^2) and bmi is up to the power of 4.**
+
+
+**PART 4: CHECK MULTIPLE LINEAR REGRESSION ASSUMPTIONS**
+```{r}
+#BEST MODEL THUS FAR
+fourth_model=lm(charges~age+I(age^2)+bmi+I(bmi^2)+I(bmi^3)+I(bmi^4)+children+factor(smoker)+factor(region)+bmi:factor(smoker)+bmi:factor(region),data=insurance_data)
+summary(fourth_model)
+```
+$$
+\widehat{\text Charges}{=} \beta_{0} + β_1 Age + \beta_{2}(\text{Age}^{2}) + \beta_{3} \text{BMI} + \beta_{4} (\text{BMI}^{2}) + \beta_{5} (\text{BMI}^{3}) + \beta_{6} (\text{BMI}^{4}) +\\ \beta_{7} \text{Children} + \beta_{8} \text{Smoker}_{\text{yes}} + \beta_{9} \text{Region}_{\text{northwest}} + \beta_{10} \text{Region}_{\text{southeast}} + \beta_{11} \text{Region}_{\text{southwest}} +\\ \beta_{12}  \text{BMI} * \text{Smoker}_{\text{yes}} + \beta_{13} \text{BMI} * \text{Region}_{\text{northwest}} + \beta_{14} \text{BMI} * \text{Region}_{\text{southeast}} + \beta_{15} \text{BMI} * \text{Region}_{\text{southwest}}
+$$
+$$
+\widehat{\text Charges}{=} 83950-20.71 Age + 3.579(\text{Age}^{2}) -10290 \text{BMI} + 459.2 (\text{BMI}^{2}) -8.556 (\text{BMI}^{3}) +0.0564 (\text{BMI}^{4}) +\\667.7 \text{Children} -20730 \text{Smoker}_{\text{yes}} + 9.681 \text{Region}_{\text{northwest}} + 2852 \text{Region}_{\text{southeast}} + 1097 \text{Region}_{\text{southwest}} +\\ 1452  \text{BMI} * \text{Smoker}_{\text{yes}} -21.36 \text{BMI} * \text{Region}_{\text{northwest}} -126.4 \text{BMI} * \text{Region}_{\text{southeast}} -79.66 \text{BMI} * \text{Region}_{\text{southwest}}
+$$
+**LINEARITY ASSUMPTION**
+```{r}
+#Checking linearity assumptions
+#Plotting residuals vs predicted value
+ggplot(fourth_model, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0) 
+```
+There appears to be no pattern of the residuals at all.The R2adj of the fourth model is 0.8455 indicates the variation in charges that can be explained by this model is 84.55% with RMSE= 4761
+We can conclude that the fourth model is the best fit model to predict charges among the models we considered.
+
+**INDEPENDENCE ASSUMPTION**
+
+In this dataset the subjects were not related to time. But it is related to space, or group, due to the presence of region variable so we can say that their measurements are not independent. In this dataset there exists spatial association.
+Lets check for independence
+
+```{r}
+#Checking Independence association
+#Plotting residual vs spatial variable(region)
+
+full_model=lm(charges~age+factor(sex)+bmi+children+factor(smoker)+factor(region),data=insurance_data)
+residuals = residuals(full_model)
+boxplot(residuals ~ region, data = insurance_data, xlab = "Region", ylab = "Residuals", main = "Residuals vs Region")
+```
+Looking at the residual vs regions plot we can see that there is no significant clumping of residuals. This suggests that the independence assumption is not violated and hence we can say that the Independence assumption is met
+
+*EQUAL VARIANCE ASSUMPTION*
+```{r}
+#Checking equal Variance (homoscedasticity)
+#Plotting a residual plot and scale location 
+par(mfrow=c(1,2))
+plot(fourth_model, which=1)
+plot(fourth_model, which=3)
+```
+From the residual plots and scale location plot we do not see any funneling so we can say homoscedasticity may be present.There appears to be no problem with the homoscedasticity assumption
+However to assess homoscedasticity we use the Breusch-Pagan test
+
+Breusch-Pagan test to verify if homoscedasticity is present
+
+Hypothesis-
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:&\text{heteroscedasticity is not present (homoscedasticity)} \\
+{\rm H}_{A} &:& \text{heteroscedasticity is present} \\
+
+
+\text{or}\\
+
+
+{\rm H}_{0} &:& \sigma_1^2 = \sigma_2^2 = \dots = \sigma_n^2\\
+{\rm H}_{A} &:& \text {at least one}\sigma_i^2 \text {is different from the others i = 1, 2, ..., n} 
+\end{eqnarray}\\
+$$
+
+```{r}
+library(lmtest)
+bptest(fourth_model)
+```
+The null hypothesis is that we have homoscedasticity. Clearly, we fail to reject the null hypothesis since the p-value of 0.5642 is greater that the level of significance of 0.05 and conclude that there is homoscedasticity. Which means heteroscedasticity is not present. Therefore there appears to be no problem with homoscedasticity assumption ")
+
+
+*NORMALITY ASSUMPTION*
+```{r}
+#Checking Normality assumption
+#Plotting histogram and Q-Q plot
+
+par(mfrow=c(1,2))
+hist(residuals(fourth_model))
+plot(fourth_model, which=2)
+```
+The outputs show that the residual data does not have normal distribution (from histogram and Q-Q plot)
+
+Hypothesis-
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:&\text{the sample data are significantly normally distributed} \\
+{\rm H}_{A} &:& \text{the sample data are not significantly normally distributed} \\
+\end{eqnarray}\\
+$$
+```{r}
+#Testing for Normality
+shapiro.test(residuals(fourth_model))
+```
+Shapiro-Wilk normality test confirms that the residuals are not normally distributed as the p-value=0 is less than 0.05(level of significance).Therefore we reject the null hypothesis that we have normality and state that there appears to be a problem with the normality assumption. The data is not normally distributed.
+We will check for transformations in the further part of the project for attaining normality
+
+*MULTICOLLINEARITY ASSUMPTION*
+```{r}
+#Checking Multicollinearity
+
+library(mctest) #for VIF
+# We are only using the main effect independent predictors from the above fourth model for scatterplot and VIF
+#From the fourth model the independent predictors are age, bmi, children, smoker and region which will be used to check multicollinearity
+
+pairs(charges~age+bmi+children+factor(smoker)+factor(region), data=insurance_data)
+```
+```{r}
+insurance_vif_model= lm(charges~age+bmi+children+factor(smoker)+factor(region), data=insurance_data)
+imcdiag(insurance_vif_model, method="VIF")
+```
+Therefore by checking all pairwise combinations of predictors in scatterplots and using the VIF function, we do not detect any high correlation between predictors.Therefore there appears to be no problem with multicollinearity assumption.
+
+*OUTLIERS*
+```{r}
+#Checking outliers
+
+# 1.Residuals vs Leverage Plot
+plot(fourth_model,which=5)
+```
+Based on this plot everything looks okay
+```{r}
+# 2.Cooks distance
+plot(fourth_model,pch=18,col="red",which=c(4))
+```
+There are no outliers in the cooks distance.
+
+```{r}
+# 3.Leverage points
+lev=hatvalues(fourth_model)
+p = length(coef(fourth_model))
+n = nrow(insurance_data)
+outlier2p = lev[lev>(2*p/n)]
+outlier3p = lev[lev>(3*p/n)]
+print("h_I>2p/n, outliers are")
+print(outlier2p)
+print("h_I>3p/n, outliers are")
+print(outlier3p)
+plot(rownames(insurance_data),lev, main = "Leverage in Insurance Dataset", xlab="observation",
+    ylab = "Leverage Value")
+abline(h = 2 *p/n, lty = 1)
+abline(h = 3 *p/n, lty = 1)
+```
+
+We do not detect any outliers by using leverage values greater that 3pn/n. Hence we can say there are no outliers that could pose problems
+
+**PART 5: BOX-COX TRANSFORMATIONS (TRANSFORMATIONS FOR NONNORMALITY)**
+
+To remedy nonnormality of linear regression model, we need a transformation on Y, since the shapes and spreads of the distributions of Y need to be changed. Such a transformation on Y can be achieved by box-cox transformation.
+Note that the regression model includes an additional parameter,λ, which needs to be estimated. The
+Box-Cox procedure uses the method of maximum likelihood to estimate λ
+
+```{r}
+bc_fourthmodel=boxcox(fourth_model,lambda=seq(-1,1))
+```
+Best lambda value lies between 0.2 and 0.3
+```{r}
+#extract best lambda 
+bestlambda=bc_fourthmodel$x[which(bc_fourthmodel$y==max(bc_fourthmodel$y))]
+bestlambda
+```
+
+Now consider transformation using best lambda = 0.2727273
+```{r}
+bcmodel1=lm((((charges^0.2727273)-1)/0.2727273) ~ age + I(age^2) + bmi + I(bmi^2) + I(bmi^3) + 
+    I(bmi^4) + children + factor(smoker) + factor(region) + bmi:factor(smoker) + 
+    bmi:factor(region),data=insurance_data)
+summary(bcmodel1)
+```
+
+Lets check if the normality assumption is met after applying the transformation.
+
+Hypothesis-
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:&\text{the data are significantly normally distributed} \\
+{\rm H}_{A} &:& \text{the data are not significantly normally distributed} \\
+\end{eqnarray}\\
+$$
+```{r}
+#testing for Normality 
+shapiro.test(residuals(bcmodel1))
+```
+Shapiro-Wilk normality test confirms that the residuals are not normally distributed as the p-value approx 0 is less than 0.05(level of significance).Therefore we reject the null hypothesis that we have normality and state that there appears to be a problem with the normality assumption even after applying box cox transformation. The data after transformation is not normally distributed.
+
+*Log transformation*
+Now consider log transformation, lambda = 0
+```{r}
+bcmodel2=lm(log(charges) ~ age + I(age^2) + bmi + I(bmi^2) + I(bmi^3) + 
+    I(bmi^4) + children + factor(smoker) + factor(region) + bmi:factor(smoker) + 
+    bmi:factor(region),data=insurance_data)
+summary(bcmodel2)
+```
+
+Lets check if the normality assumption is met after applying the transformation.
+
+Hypothesis-
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:&\text{the data are significantly normally distributed} \\
+{\rm H}_{A} &:& \text{the data are not significantly normally distributed} \\
+\end{eqnarray}\\
+$$
+```{r}
+#testing for Normality 
+shapiro.test(residuals(bcmodel2))
+```
+Shapiro-Wilk normality test confirms that the residuals are not normally distributed as the p-value approx 0 is less than 0.05(level of significance).Therefore we reject the null hypothesis that we have normality and state that there appears to be a problem with the normality assumption even after applying log transformation. The data after transformation is not normally distributed.
+
+
+
+**PART 6: PREDICT **
+
+Estimate the anticipated insurance cost for two individuals with similar characteristics, differing only in their smoking status. 
+```{r}
+#Use the final model to estimate the anticipated insurance cost for an individual who is 55 years old, has a BMI of 39, does not have children, is a smoker, and resides in the southwestern region
+
+smoker_data = data.frame(age=55, bmi=39,children = 0, smoker = "yes", region = "southwest")
+predict(fourth_model,smoker_data,interval="predict")
+```
+```{r}
+#Use the final model to estimate the anticipated insurance cost for an individual who is 55 years old, has a BMI of 39, does not have children, is a non-smoker, and resides in the southwestern region
+
+non_smoker_data = data.frame(age=55, bmi=39,children = 0, smoker = "no", region = "southwest")
+predict(fourth_model,non_smoker_data,interval="predict")
+```
+ For an individual who is 55 years old, has a BMI of 39, no children, and resides in the southwestern region, the anticipated insurance cost is estimated to be $47,565.31 if the person is a smoker ("yes"). On the other hand, if the individual is a non-smoker ("no"), the estimated insurance cost is lower at $11,646.55. The significant difference in these costs highlights the impact of smoking status on the anticipated insurance expenses, with smokers generally incurring higher insurance costs compared to non-smokers.
+ 
+ 
+
